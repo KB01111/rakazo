@@ -11,6 +11,7 @@ import {
   Layers,
   MessageCircle,
   Monitor,
+  Server,
   Settings,
   ShieldCheck,
   Volume2,
@@ -33,6 +34,7 @@ export function useSettingsNavItems(available: {
   wallet: boolean;
   computer: boolean;
   billing: boolean;
+  server?: boolean;
   updates: boolean;
   labs: boolean;
 }): SettingsNavItem[] {
@@ -99,6 +101,7 @@ export function useSettingsNavItems(available: {
       description: t`Spaces keep work apart. Bots, chats, memory and computers never cross between them.`,
     },
     { id: "organization", label: t`Organization`, icon: Building2 },
+    ...(available.server ? [{ id: "server" as const, label: t`Server`, icon: Server }] : []),
     ...(available.updates
       ? [{ id: "updates" as const, label: t`Updates`, icon: CloudDownload }]
       : []),

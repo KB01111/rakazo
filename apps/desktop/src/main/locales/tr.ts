@@ -234,4 +234,8 @@ export const TR_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "Rakazo’yu yeniden başlat",
   "Not Now": "Şimdi değil",
   "Restart Rakazo to finish setup": "Kurulumu tamamlamak için Rakazo’yu yeniden başlatın",
+  "Host Rakazo on this computer?": "Rakazo bu bilgisayarda barındırılsın mı?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo bu bilgisayarda yerel hizmetlerini başlatacak ve {host} sunucusundan ayrılacak.",
+  "Start local server": "Yerel sunucuyu başlat",
 };

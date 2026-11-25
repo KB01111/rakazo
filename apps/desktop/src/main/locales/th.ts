@@ -224,4 +224,8 @@ export const TH_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "เริ่ม Rakazo ใหม่",
   "Not Now": "ไว้ก่อน",
   "Restart Rakazo to finish setup": "เริ่ม Rakazo ใหม่เพื่อตั้งค่าให้เสร็จ",
+  "Host Rakazo on this computer?": "โฮสต์ Rakazo บนคอมพิวเตอร์เครื่องนี้หรือไม่?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo จะเริ่มบริการภายในเครื่องนี้และสลับออกจาก {host}",
+  "Start local server": "เริ่มเซิร์ฟเวอร์ในเครื่อง",
 };

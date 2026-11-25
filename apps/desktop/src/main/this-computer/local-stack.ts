@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
-import type { DesktopLocalStackState } from "@rakazo/contracts";
+import type { DesktopLocalHostConfig, DesktopLocalStackState } from "@rakazo/contracts";
 import { t } from "../i18n.js";
 import { readPrivateFile, writePrivateFile } from "../setup/setup-store.js";
 import type { DockerFailureKind, RunDocker, RunDockerResult } from "./docker-cli.js";
@@ -12,6 +12,13 @@ import {
   dockerSpawnEnv,
   resolveDockerBinary,
 } from "./docker-cli.js";
+import {
+  DEFAULT_LOCAL_HOST_CONFIG,
+  hasCustomLocalHostConfig,
+  localHostComposeEnv,
+  localHostConfigFingerprint,
+  readLocalHostConfig,
+} from "./local-host-config.js";
 
 export const STACK_DIR_NAME = "stack";
 export const STACK_PROJECT_NAME = "rakazo-desktop";
@@ -508,6 +515,7 @@ export abstract class StackLifecycle implements StackController {
  */
 export class LocalStackController extends StackLifecycle {
   private currentStackToken: string | null = null;
+  private activeLocalConfig: DesktopLocalHostConfig = DEFAULT_LOCAL_HOST_CONFIG;
   /** Set once setup has tried to start the Docker app, so a re-check never reopens it on top of the person's work. */
   private dockerAppLaunch: { app: string | null; at: number } | undefined;
   /** True once `compose up` may have left containers running, or a launch probe confirmed
@@ -519,6 +527,10 @@ export class LocalStackController extends StackLifecycle {
 
   constructor(private readonly deps: LocalStackDeps) {
     super(deps.imageTag, deps.localWebUrl, deps.onState);
+  }
+
+  private effectiveImageTag(config: DesktopLocalHostConfig = this.activeLocalConfig): string {
+    return config.imageTag || this.deps.imageTag;
   }
 
   /**
@@ -536,22 +548,27 @@ export class LocalStackController extends StackLifecycle {
     // A successful stop during either file read invalidates the probe result.
     const stopGeneration = this.stopGeneration;
     if (this.stopInFlight()) return false;
+    const [localConfig, hasCustomConfig] = await Promise.all([
+      readLocalHostConfig(this.deps.stackDir),
+      hasCustomLocalHostConfig(this.deps.stackDir),
+    ]);
     if (
-      this.deps.hostComputer &&
+      (this.deps.hostComputer || hasCustomConfig) &&
       (await readPrivateFile(path.join(this.deps.stackDir, STACK_HOST_CONFIG_FILE), 256)) !==
-        this.hostConfigIdentity()
+        this.hostConfigIdentity(localConfig, hasCustomConfig)
     )
       return false;
     const token = await readStackToken(this.deps.stackDir);
     if (token === null) return false;
     this.currentStackToken = token;
+    const desiredTag = this.effectiveImageTag(localConfig);
     try {
       const probed = await this.deps.probe(
         url,
         AbortSignal.timeout(HEALTH_POLL_INTERVAL_MS),
         token,
       );
-      const matched = probed === this.deps.imageTag;
+      const matched = probed === desiredTag;
       // A stop that succeeded while the probe was pending may have stopped the stack it saw.
       if (matched && stopGeneration === this.stopGeneration && !this.managedStackMayRun) {
         this.managedStackMayRun = true;
@@ -677,8 +694,14 @@ export class LocalStackController extends StackLifecycle {
     await ensureStackEnv(this.deps.stackDir, template, this.deps.randomHex);
     const stackToken = await ensureStackToken(this.deps.stackDir, this.deps.randomHex);
     this.currentStackToken = stackToken;
+    this.activeLocalConfig = await readLocalHostConfig(this.deps.stackDir);
+    const hasCustomConfig = await hasCustomLocalHostConfig(this.deps.stackDir);
+    const desiredTag = this.effectiveImageTag();
+    if (this.current.imageTag !== desiredTag) {
+      this.setState({ ...this.current, imageTag: desiredTag });
+    }
 
-    const imagesCached = await this.hasLocalReleaseImages(binary, signal);
+    const imagesCached = await this.hasLocalReleaseImages(binary, signal, desiredTag);
     if (signal.aborted) return this.push({ type: "failed", message: startInterrupted() });
     if (!imagesCached) {
       this.push({ type: "pull-start" });
@@ -688,7 +711,7 @@ export class LocalStackController extends StackLifecycle {
       if (pulled.code !== 0) {
         this.push({
           type: "failed",
-          message: stackFailureMessage(failureKind(pulled), "pulling", this.deps.imageTag),
+          message: stackFailureMessage(failureKind(pulled), "pulling", desiredTag),
         });
         return;
       }
@@ -720,7 +743,7 @@ export class LocalStackController extends StackLifecycle {
       await this.compose(binary, ["logs", "--tail", "30", "--no-color"], LOGS_TIMEOUT_MS, signal);
       this.push({
         type: "failed",
-        message: stackFailureMessage(failureKind(up), "starting", this.deps.imageTag),
+        message: stackFailureMessage(failureKind(up), "starting", desiredTag),
       });
       return;
     }
@@ -729,11 +752,11 @@ export class LocalStackController extends StackLifecycle {
     const sleep = this.deps.sleep ?? defaultSleep;
     const deadline = Date.now() + (this.deps.healthTimeoutMs ?? STACK_HEALTH_TIMEOUT_MS);
     while (!signal.aborted) {
-      if ((await this.deps.probe(this.currentWebUrl, signal, stackToken)) === this.deps.imageTag) {
-        if (this.deps.hostComputer)
+      if ((await this.deps.probe(this.currentWebUrl, signal, stackToken)) === desiredTag) {
+        if (this.deps.hostComputer || hasCustomConfig)
           await writePrivateFile(
             path.join(this.deps.stackDir, STACK_HOST_CONFIG_FILE),
-            this.hostConfigIdentity(),
+            this.hostConfigIdentity(this.activeLocalConfig, hasCustomConfig),
           );
         this.push({ type: "ready" });
         return;
@@ -749,10 +772,13 @@ export class LocalStackController extends StackLifecycle {
     });
   }
 
-  private async hasLocalReleaseImages(binary: string, signal: AbortSignal): Promise<boolean> {
+  private async hasLocalReleaseImages(
+    binary: string,
+    signal: AbortSignal,
+    imageTag = this.effectiveImageTag(),
+  ): Promise<boolean> {
     // Moving tags must still check the registry for newer images.
-    if (!this.deps.imageTag.startsWith("v") || !STABLE_VERSION.test(this.deps.imageTag.slice(1)))
-      return false;
+    if (!imageTag.startsWith("v") || !STABLE_VERSION.test(imageTag.slice(1))) return false;
     const config = await this.compose(
       binary,
       ["config", "--images"],
@@ -771,18 +797,27 @@ export class LocalStackController extends StackLifecycle {
     return !interrupted(signal, inspected) && inspected.code === 0;
   }
 
-  private hostConfigIdentity() {
-    return createHash("sha256").update(JSON.stringify(this.deps.hostComputer)).digest("hex");
+  private hostConfigIdentity(
+    config: DesktopLocalHostConfig = this.activeLocalConfig,
+    hasCustomConfig = false,
+  ) {
+    const payload = hasCustomConfig
+      ? { hostComputer: this.deps.hostComputer, localConfig: localHostConfigFingerprint(config) }
+      : this.deps.hostComputer;
+    return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
   }
 
   private docker(binary: string, args: string[], timeoutMs: number, signal?: AbortSignal) {
+    const { env: localHostEnv } = localHostComposeEnv(
+      this.activeLocalConfig,
+      this.currentWebUrl,
+      this.deps.imageTag,
+    );
     return this.deps.run(binary, args, {
       cwd: this.deps.stackDir,
       env: dockerSpawnEnv(this.deps.platform, this.deps.env, binary, {
         SANDBOX_HOST_URL: this.deps.hostComputer?.url ?? "",
         SANDBOX_HOST_TOKEN: this.deps.hostComputer?.token ?? "",
-        RAKAZO_IMAGE_TAG: this.deps.imageTag,
-        RAKAZO_COMPUTER_IMAGE_TAG: this.deps.imageTag,
         // Restricted egress needs host iptables rules. Docker Desktop keeps its
         // bridges inside its VM where the host cannot add them, and the app cannot
         // install root firewall rules on Linux either, so the stack would refuse
@@ -799,9 +834,7 @@ export class LocalStackController extends StackLifecycle {
         RAKAZO_WEB_PORT: new URL(this.currentWebUrl).port || "80",
         // Only web needs a stable host address. Docker allocates the API host port.
         RAKAZO_API_PORT: "0",
-        BETTER_AUTH_URL: this.currentWebUrl,
-        WEB_ORIGIN: this.currentWebUrl,
-        API_URL: this.currentWebUrl,
+        ...localHostEnv,
         COMPOSE_PROGRESS: "plain",
       }),
       timeoutMs,

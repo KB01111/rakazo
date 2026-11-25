@@ -83,7 +83,12 @@ interface Harness {
   resolveSave: (result: DesktopSetupResult) => void;
 }
 
-function mount(saved: DesktopSetup | null, locale = ENGLISH, platform = "linux"): Harness {
+function mount(
+  saved: DesktopSetup | null,
+  locale = ENGLISH,
+  platform = "linux",
+  extraState: Partial<DesktopSetupState> = {},
+): Harness {
   document.body.innerHTML = setupBody ?? "";
   const checkCalls: Array<Deferred<DesktopReachability>> = [];
   const startResult = deferred<DesktopLocalStackState>();
@@ -139,7 +144,12 @@ function mount(saved: DesktopSetup | null, locale = ENGLISH, platform = "linux")
   new Function(setupScript)();
 
   const initState = stateCalls.shift();
-  initState?.resolve({ defaultLocalUrl: DEFAULT_LOCAL_URL, cloudUrl: CLOUD_URL, saved });
+  initState?.resolve({
+    defaultLocalUrl: DEFAULT_LOCAL_URL,
+    cloudUrl: CLOUD_URL,
+    saved,
+    ...extraState,
+  });
   return {
     nextCheck: () => {
       const call = checkCalls.shift();
@@ -688,5 +698,21 @@ describe("setup", () => {
     await flush();
     expect(element("stack-phase").textContent).toBe(PL_MESSAGES["Downloading Rakazo…"]);
     expect(element("stack-detail").textContent).toBe("Pobrano 3 MB");
+  });
+
+  it("auto-selects This computer and starts the stack when autoStartLocal is set", async () => {
+    const ui = mount({ mode: "existing", serverUrl: CLOUD_URL }, ENGLISH, "win32", {
+      autoStartLocal: true,
+    });
+    await flush();
+    ui.resolveStackState(stackState("idle"));
+    await flush();
+    expect(document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value).toBe(
+      "new",
+    );
+    expect(ui.starts()).toBe(1);
+    ui.startResult.resolve(stackState("pulling"));
+    await flush();
+    expect(element("stack-phase").textContent).toBe("Downloading Rakazo…");
   });
 });

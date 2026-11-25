@@ -232,4 +232,8 @@ export const HE_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "הפעלה מחדש של Rakazo",
   "Not Now": "לא עכשיו",
   "Restart Rakazo to finish setup": "הפעילו מחדש את Rakazo כדי להשלים את ההגדרה",
+  "Host Rakazo on this computer?": "לארח את Rakazo במחשב הזה?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo יפעיל את השירותים המקומיים שלו במחשב הזה ויעבור מ-{host}.",
+  "Start local server": "הפעל שרת מקומי",
 };

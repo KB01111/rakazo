@@ -529,13 +529,18 @@
       // attempt instead of the saved mode, and follow it while it is still running.
       const stack = await bridge.stack.state();
       const attached = stack !== null && stack.phase !== "idle";
-      if (attached) document.getElementById("mode-new").checked = true;
+      if (attached || state.autoStartLocal) document.getElementById("mode-new").checked = true;
       syncPanels();
       setBusy(false);
       if (state.error) setStatus(state.error, "error");
       if (attached) {
         renderStack(stack);
         if (!TERMINAL_PHASES.has(stack.phase)) void followStack();
+        else if (state.autoStartLocal && stack.phase === "ready") {
+          await save("new", defaultLocalUrl);
+        }
+      } else if (state.autoStartLocal) {
+        void runStack();
       } else if (selectedMode() === "existing") {
         serverUrl.focus();
       } else {

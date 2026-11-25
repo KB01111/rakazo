@@ -240,4 +240,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "Перезапустить Rakazo",
   "Not Now": "Не сейчас",
   "Restart Rakazo to finish setup": "Перезапустите Rakazo, чтобы завершить настройку",
+  "Host Rakazo on this computer?": "Разместить Rakazo на этом компьютере?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo запустит локальные службы на этом компьютере и переключится с {host}.",
+  "Start local server": "Запустить локальный сервер",
 };

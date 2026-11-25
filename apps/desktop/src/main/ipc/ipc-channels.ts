@@ -92,6 +92,18 @@ export const ipcChannels = {
   "desktop.oauth.open": appPage<NonNullable<Desktop["oauth"]["open"]>>(REJECTS),
   "desktop.passkeys.rpIds": appPage<Desktop["passkeys"]["rpIds"]>([]),
   "desktop.server.change": appPage<Desktop["server"]["change"]>(undefined),
+  "desktop.server.hostLocally": appPage<NonNullable<Desktop["server"]["hostLocally"]>>(null),
+  "desktop.server.openStackFolder":
+    appPage<NonNullable<Desktop["server"]["openStackFolder"]>>(undefined),
+  "desktop.server.restartLocal": appPage<NonNullable<Desktop["server"]["restartLocal"]>>(null),
+  "desktop.server.saveLocalConfig": appPage<NonNullable<Desktop["server"]["saveLocalConfig"]>>({
+    ok: false,
+    error: "Server settings are unavailable.",
+  }),
+  "desktop.server.setStartOnLogin":
+    appPage<NonNullable<Desktop["server"]["setStartOnLogin"]>>(null),
+  "desktop.server.state": appPage<NonNullable<Desktop["server"]["state"]>>(null),
+  "desktop.server.stopLocal": appPage<NonNullable<Desktop["server"]["stopLocal"]>>(null),
   "desktop.speech.abort": appPage<Desktop["speech"]["abort"]>(undefined),
   "desktop.speech.start": appPage<Desktop["speech"]["start"]>(false),
   "desktop.speech.stop": appPage<Desktop["speech"]["stop"]>(undefined),

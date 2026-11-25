@@ -47,6 +47,7 @@ export function usePaletteActions({
     wallet: Boolean(me?.paymentWalletProvider),
     computer: me?.computerSettingsEnabled === true && computersAreUnavailable(me?.sandboxProvider),
     billing: me?.billingEnabled === true,
+    server: Boolean(desktopBridge()?.server),
     updates: Boolean(desktopBridge()?.update),
     labs: Boolean(me?.labsAvailable.length),
   });

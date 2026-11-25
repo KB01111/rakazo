@@ -62,15 +62,11 @@ address for the same install, list it in
 
 ## Desktop "This computer" servers
 
-The server the desktop app runs under **This computer** is for that computer only. It listens on
-loopback (`http://127.0.0.1:45173` by default, or another loopback port if that one is taken), and
-the app sets its origins to that address each time it starts. It also accepts a single account and
-relaxes some network settings because nothing else can reach it. Exposing it to other devices is
-not supported, so a phone can't connect to it over the LAN or Tailscale.
+The server the desktop app runs under **This computer** (or **Settings → Server → Host on this PC**) listens on loopback (`http://127.0.0.1:45173` by default, or another loopback port if that one is taken) and accepts signups only from the desktop app's own window. By default it is reachable only from this computer.
 
-To use the mobile app, run Rakazo with the [published images](./self-host.md#published-images-no-checkout)
-on a server, or on the same computer, and connect the phone as described above. Point the desktop
-app at that server with **Existing instance**.
+When hosting on your PC, open **Settings → Server** to restart or stop the local services, toggle **Start when you sign in**, or open **Hosting options** to set a fork container image repository/tag, allow local network access, add a public or tailnet HTTPS URL (keeping the desktop loopback origin trusted via `RAKAZO_EXTRA_AUTH_ORIGINS`), configure a manual webhook ingress URL, attach S3-compatible object storage, or tune worker concurrency and database pool size.
+
+For an always-on remote server (such as a cloud VM), run Rakazo with the [published images](./self-host.md#published-images-no-checkout) or [production Compose](./self-host-production.md#public-single-vm-deployment) and point the desktop app at that server with **Existing instance**.
 
 ## Mobile push notifications
 
