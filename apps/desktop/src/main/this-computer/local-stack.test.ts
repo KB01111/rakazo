@@ -421,12 +421,14 @@ interface RecordedCall {
 
 type Script = (
   args: string[],
+  call?: RecordedCall,
 ) => Partial<RunDockerResult> & { lines?: string[]; wait?: Promise<void> };
 
 function fakeRun(calls: RecordedCall[], script: Script): RunDocker {
   return async (binary, args, options) => {
-    calls.push({ binary, args, cwd: options.cwd, env: options.env });
-    const { lines = [], wait, ...reply } = script(args);
+    const recorded: RecordedCall = { binary, args, cwd: options.cwd, env: options.env };
+    calls.push(recorded);
+    const { lines = [], wait, ...reply } = script(args, recorded);
     for (const line of lines) options.onLine?.(line);
     await wait;
     return { code: 0, stdout: "", stderr: "", ...reply };
@@ -1205,6 +1207,133 @@ describe("LocalStackController", () => {
     expect((await stack.start()).message).toBe(
       "Docker is installed but not running. Open it to continue.",
     );
+  });
+
+  it("launches Kiri first on Windows, runs Compose on the kiri context, and falls back to Docker Desktop if Kiri times out", async () => {
+    const kiriBinary = "C:\\Users\\me\\AppData\\Local\\Kiri\\bin\\docker.exe";
+    const desktopBinary = "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe";
+    const winEnv = {
+      LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local",
+      ProgramFiles: "C:\\Program Files",
+      SystemRoot: "C:\\Windows",
+      PATH: "",
+    };
+    const bothExist = (file: string) => file === kiriBinary || file === desktopBinary;
+
+    // 1. Neither running -> launches Kiri first and runs/stops on Kiri once it answers.
+    let kiriUp = false;
+    const launched1: string[] = [];
+    const stack1 = controller(
+      {
+        platform: "win32",
+        env: winEnv,
+        exists: bothExist,
+        launchDockerApp: async (binary) => {
+          launched1.push(binary);
+          return binary === kiriBinary ? "Kiri" : "Docker Desktop";
+        },
+      },
+      (args, call) => {
+        if (args[0] === "info") {
+          return call?.env.DOCKER_CONTEXT === "kiri" && kiriUp
+            ? ok(args)
+            : { code: 1, stderr: "failed to connect to the docker API at npipe:////./pipe/kiri" };
+        }
+        return ok(args);
+      },
+    );
+    expect(await stack1.start()).toMatchObject({
+      phase: "docker-not-running",
+      message: "Starting Kiri…",
+    });
+    expect(launched1).toEqual([kiriBinary]);
+
+    kiriUp = true;
+    expect((await stack1.start()).phase).toBe("ready");
+    const upCall1 = calls.find((call) => call.args[7] === "up");
+    expect(upCall1?.binary).toBe(kiriBinary);
+    expect(upCall1?.env.DOCKER_CONTEXT).toBe("kiri");
+
+    await stack1.stop();
+    const stopCall1 = calls.find((call) => call.args[7] === "stop");
+    expect(stopCall1?.binary).toBe(kiriBinary);
+    expect(stopCall1?.env.DOCKER_CONTEXT).toBe("kiri");
+
+    // 2. Kiri times out past fallback grace -> automatically launches and runs on Docker Desktop.
+    calls = [];
+    let clock = 0;
+    let desktopUp = false;
+    const launched2: string[] = [];
+    const stack2 = controller(
+      {
+        platform: "win32",
+        env: winEnv,
+        exists: bothExist,
+        now: () => clock,
+        launchDockerApp: async (binary) => {
+          launched2.push(binary);
+          return binary === kiriBinary ? "Kiri" : "Docker Desktop";
+        },
+      },
+      (args, call) => {
+        if (args[0] === "info") {
+          return call?.env.DOCKER_CONTEXT === "desktop-linux" && desktopUp
+            ? ok(args)
+            : { code: 1, stderr: "failed to connect to the docker API" };
+        }
+        return ok(args);
+      },
+    );
+    expect((await stack2.start()).message).toBe("Starting Kiri…");
+    clock = 30_000;
+    expect((await stack2.start()).message).toBe("Starting Docker Desktop…");
+    expect(launched2).toEqual([kiriBinary, desktopBinary]);
+
+    desktopUp = true;
+    expect((await stack2.start()).phase).toBe("ready");
+    const upCall2 = calls.find((call) => call.args[7] === "up");
+    expect(upCall2?.binary).toBe(desktopBinary);
+    expect(upCall2?.env.DOCKER_CONTEXT).toBe("desktop-linux");
+
+    await stack2.stop();
+    const stopCall2 = calls.find((call) => call.args[7] === "stop");
+    expect(stopCall2?.binary).toBe(desktopBinary);
+    expect(stopCall2?.env.DOCKER_CONTEXT).toBe("desktop-linux");
+  });
+
+  it("uses already-running Docker Desktop immediately on Windows without launching Kiri", async () => {
+    const kiriBinary = "C:\\Users\\me\\AppData\\Local\\Kiri\\bin\\docker.exe";
+    const desktopBinary = "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe";
+    const launched: string[] = [];
+    const stack = controller(
+      {
+        platform: "win32",
+        env: {
+          LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local",
+          ProgramFiles: "C:\\Program Files",
+          SystemRoot: "C:\\Windows",
+          PATH: "",
+        },
+        exists: (file) => file === kiriBinary || file === desktopBinary,
+        launchDockerApp: async (binary) => {
+          launched.push(binary);
+          return "Kiri";
+        },
+      },
+      (args, call) => {
+        if (args[0] === "info") {
+          return call?.env.DOCKER_CONTEXT === "desktop-linux"
+            ? ok(args)
+            : { code: 1, stderr: "failed to connect to the docker API at npipe:////./pipe/kiri" };
+        }
+        return ok(args);
+      },
+    );
+    expect((await stack.start()).phase).toBe("ready");
+    expect(launched).toEqual([]);
+    const upCall = calls.find((call) => call.args[7] === "up");
+    expect(upCall?.binary).toBe(desktopBinary);
+    expect(upCall?.env.DOCKER_CONTEXT).toBe("desktop-linux");
   });
 
   it("explains the docker group when the socket is not accessible", async () => {

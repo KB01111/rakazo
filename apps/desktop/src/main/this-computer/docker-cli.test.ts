@@ -11,6 +11,7 @@ import {
   dockerSpawnEnv,
   isDesktopSetupLink,
   resolveDockerBinary,
+  resolveDockerTargets,
   runDocker,
 } from "./docker-cli.js";
 
@@ -48,6 +49,11 @@ describe("dockerAppFor", () => {
     expect(
       dockerAppFor("darwin", "/Applications/OrbStack.app/Contents/MacOS/xbin/docker"),
     ).toMatchObject({ name: "OrbStack", args: ["-b", "dev.kdrag0n.MacVirt"] });
+    expect(dockerAppFor("win32", "C:\\Users\\me\\AppData\\Local\\Kiri\\bin\\docker.exe")).toEqual({
+      name: "Kiri",
+      command: "C:\\Users\\me\\AppData\\Local\\Kiri\\kiri-win.exe",
+      args: ["--background"],
+    });
     expect(
       dockerAppFor("win32", "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe"),
     ).toEqual({
@@ -78,6 +84,19 @@ describe("dockerBinaryCandidates", () => {
       "/Users/me/.rd/bin/docker",
       "/Applications/Rancher Desktop.app/Contents/Resources/resources/darwin/bin/docker",
       "/usr/bin/docker",
+    ]);
+  });
+
+  it("checks Kiri before Docker Desktop on Windows when LOCALAPPDATA is set", () => {
+    const candidates = dockerBinaryCandidates("win32", {
+      LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local",
+      ProgramFiles: "C:\\Program Files",
+      PATH: "C:\\tools",
+    });
+    expect(candidates).toEqual([
+      "C:\\Users\\me\\AppData\\Local\\Kiri\\bin\\docker.exe",
+      "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+      "C:\\tools\\docker.exe",
     ]);
   });
 
@@ -131,6 +150,48 @@ describe("resolveDockerBinary", () => {
     );
     // A real docker on PATH must not be used when the override points nowhere.
     expect(resolveDockerBinary("linux", env, (file) => file === "/usr/bin/docker")).toBeNull();
+  });
+});
+
+describe("resolveDockerTargets", () => {
+  const kiri = "C:\\Users\\me\\AppData\\Local\\Kiri\\bin\\docker.exe";
+  const desktop = "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe";
+  const winEnv = {
+    LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local",
+    ProgramFiles: "C:\\Program Files",
+  };
+
+  it("prefers Kiri with Docker Desktop contexts as fallback when both are installed on Windows", () => {
+    expect(
+      resolveDockerTargets("win32", winEnv, (file) => file === kiri || file === desktop),
+    ).toEqual([
+      { binary: kiri, context: "kiri" },
+      { binary: desktop, context: "desktop-linux" },
+      { binary: desktop, context: "default" },
+    ]);
+  });
+
+  it("uses Kiri alone with a default-context fallback when Docker Desktop is absent", () => {
+    expect(resolveDockerTargets("win32", winEnv, (file) => file === kiri)).toEqual([
+      { binary: kiri, context: "kiri" },
+      { binary: kiri },
+    ]);
+  });
+
+  it("uses Docker Desktop without overriding context when Kiri is absent", () => {
+    expect(resolveDockerTargets("win32", winEnv, (file) => file === desktop)).toEqual([
+      { binary: desktop },
+    ]);
+  });
+
+  it("respects explicit DOCKER_CONTEXT or DOCKER_HOST overrides on Windows", () => {
+    expect(
+      resolveDockerTargets(
+        "win32",
+        { ...winEnv, DOCKER_CONTEXT: "custom" },
+        (file) => file === kiri || file === desktop,
+      ),
+    ).toEqual([{ binary: kiri }]);
   });
 });
 
@@ -214,6 +275,10 @@ describe("dockerSpawnEnv", () => {
 describe("classifyDockerFailure", () => {
   it.each([
     ["Cannot connect to the Docker daemon at unix:///var/run/docker.sock", "daemon-down"],
+    [
+      "failed to connect to the docker API at npipe:////./pipe/kiri; check if the path is correct",
+      "daemon-down",
+    ],
     [
       "error during connect: Head http://%2F%2F.%2Fpipe: open //./pipe: file not found",
       "daemon-down",

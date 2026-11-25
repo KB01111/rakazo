@@ -62,7 +62,7 @@ address for the same install, list it in
 
 ## Desktop "This computer" servers
 
-The server the desktop app runs under **This computer** (or **Settings → Server → Host on this PC**) listens on loopback (`http://127.0.0.1:45173` by default, or another loopback port if that one is taken) and accepts signups only from the desktop app's own window. By default it is reachable only from this computer.
+The server the desktop app runs under **This computer** (or **Settings → Server → Host on this PC**) listens on loopback (`http://127.0.0.1:45173` by default, or another loopback port if that one is taken) and accepts signups only from the desktop app's own window. On Windows, one-click local hosting automatically uses Kiri when installed and falls back to Docker Desktop. By default it is reachable only from this computer.
 
 When hosting on your PC, open **Settings → Server** to restart or stop the local services, toggle **Start when you sign in**, or open **Hosting options** to set a fork container image repository/tag, allow local network access, add a public or tailnet HTTPS URL (keeping the desktop loopback origin trusted via `RAKAZO_EXTRA_AUTH_ORIGINS`), configure a manual webhook ingress URL, attach S3-compatible object storage, or tune worker concurrency and database pool size.
 

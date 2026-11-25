@@ -42,14 +42,25 @@ export function dockerAppFor(platform: string, binaryRealPath: string): DockerAp
     }
     return null;
   }
-  const suffix = path.win32.join("Docker", "Docker", "resources", "bin", "docker.exe");
-  if (platform === "win32" && binaryRealPath.toLowerCase().endsWith(suffix.toLowerCase())) {
-    const installDir = path.win32.resolve(path.win32.dirname(binaryRealPath), "..", "..");
-    return {
-      name: "Docker Desktop",
-      command: path.win32.join(installDir, "Docker Desktop.exe"),
-      args: [],
-    };
+  if (platform === "win32") {
+    const kiriSuffix = path.win32.join("Kiri", "bin", "docker.exe");
+    if (binaryRealPath.toLowerCase().endsWith(kiriSuffix.toLowerCase())) {
+      const installDir = path.win32.resolve(path.win32.dirname(binaryRealPath), "..");
+      return {
+        name: "Kiri",
+        command: path.win32.join(installDir, "kiri-win.exe"),
+        args: ["--background"],
+      };
+    }
+    const suffix = path.win32.join("Docker", "Docker", "resources", "bin", "docker.exe");
+    if (binaryRealPath.toLowerCase().endsWith(suffix.toLowerCase())) {
+      const installDir = path.win32.resolve(path.win32.dirname(binaryRealPath), "..", "..");
+      return {
+        name: "Docker Desktop",
+        command: path.win32.join(installDir, "Docker Desktop.exe"),
+        args: [],
+      };
+    }
   }
   return null;
 }
@@ -102,6 +113,9 @@ function dockerInstallDirectories(platform: string, env: NodeJS.ProcessEnv): str
     }
     directories.push("/Applications/Rancher Desktop.app/Contents/Resources/resources/darwin/bin");
   } else if (platform === "win32") {
+    if (env.LOCALAPPDATA) {
+      directories.push(path.win32.join(env.LOCALAPPDATA, "Kiri", "bin"));
+    }
     const programFiles = env.ProgramFiles ?? "C:\\Program Files";
     directories.push(path.win32.join(programFiles, "Docker", "Docker", "resources", "bin"));
   } else {
@@ -133,6 +147,63 @@ export function resolveDockerBinary(
   const override = env.RAKAZO_DOCKER_BINARY?.trim();
   if (override) return exists(override) ? override : null;
   return dockerBinaryCandidates(platform, env).find((candidate) => exists(candidate)) ?? null;
+}
+
+export interface DockerRuntimeTarget {
+  binary: string;
+  /** Optional `DOCKER_CONTEXT` override when selecting between co-installed local runtimes. */
+  context?: string;
+}
+
+/**
+ * Returns installed Docker-compatible runtimes in priority order.
+ * On Windows without an explicit `DOCKER_HOST` or `DOCKER_CONTEXT`, Kiri is tried first
+ * (targeting its `kiri` context) with Docker Desktop (`desktop-linux`, then `default`) as fallback.
+ */
+export function resolveDockerTargets(
+  platform: string,
+  env: NodeJS.ProcessEnv,
+  exists: (file: string) => boolean,
+): DockerRuntimeTarget[] {
+  const override = env.RAKAZO_DOCKER_BINARY?.trim();
+  if (override) return exists(override) ? [{ binary: override }] : [];
+  if (platform !== "win32" || env.DOCKER_HOST?.trim() || env.DOCKER_CONTEXT?.trim()) {
+    const binary = resolveDockerBinary(platform, env, exists);
+    return binary === null ? [] : [{ binary }];
+  }
+
+  const kiriBinary = env.LOCALAPPDATA
+    ? path.win32.join(env.LOCALAPPDATA, "Kiri", "bin", "docker.exe")
+    : null;
+  const dockerDesktopBinary = path.win32.join(
+    env.ProgramFiles ?? "C:\\Program Files",
+    "Docker",
+    "Docker",
+    "resources",
+    "bin",
+    "docker.exe",
+  );
+  const hasKiri = kiriBinary !== null && exists(kiriBinary);
+  const hasDockerDesktop = exists(dockerDesktopBinary);
+  const targets: DockerRuntimeTarget[] = [];
+
+  if (hasKiri) {
+    targets.push({ binary: kiriBinary, context: "kiri" });
+    if (!hasDockerDesktop) targets.push({ binary: kiriBinary });
+  }
+  if (hasDockerDesktop) {
+    if (hasKiri) {
+      targets.push({ binary: dockerDesktopBinary, context: "desktop-linux" });
+      targets.push({ binary: dockerDesktopBinary, context: "default" });
+    } else {
+      targets.push({ binary: dockerDesktopBinary });
+    }
+  }
+  if (targets.length === 0) {
+    const fallback = resolveDockerBinary(platform, env, exists);
+    if (fallback !== null) targets.push({ binary: fallback });
+  }
+  return targets;
 }
 
 const SPAWN_ENV_ALLOWLIST = [
@@ -336,6 +407,7 @@ export type DockerFailureKind =
 
 const DAEMON_DOWN = [
   "cannot connect to the docker daemon",
+  "failed to connect to the docker api",
   "is the docker daemon running",
   "error during connect",
   "docker desktop is starting",

@@ -259,3 +259,50 @@ it("hides container/network options when unsupported and disables save while res
   expect(saveButton?.disabled).toBe(false);
   await unmount();
 });
+
+it("rechecks local services automatically while waiting for Kiri or Docker to finish starting", async () => {
+  vi.useFakeTimers();
+  try {
+    const waitingState: DesktopServerState = {
+      kind: "local",
+      serverUrl: "http://127.0.0.1:45173",
+      localWebUrl: "http://127.0.0.1:45173",
+      localStack: { ...stack("docker-not-running"), message: "Starting Kiri…" },
+      localStackRunning: false,
+      startOnLogin: false,
+      startOnLoginSupported: true,
+      localConfig: {
+        imageRepo: "",
+        imageTag: "",
+        allowLanAccess: false,
+        publicOrigin: "",
+        webhookPublicUrl: "",
+        objectStorageBucket: "",
+        objectStorageEndpoint: "",
+        objectStorageRegion: "",
+        objectStorageCredentialsSet: false,
+        workerConcurrency: "",
+        dbPoolMax: "",
+      },
+    };
+    const restartLocal = vi.fn(async () => waitingState);
+    window.rakazoDesktop = {
+      platform: "win32",
+      server: {
+        change: vi.fn(async () => undefined),
+        state: vi.fn(async () => waitingState),
+        restartLocal,
+        onLocalStackChange: () => () => undefined,
+      },
+    } as unknown as RakazoDesktop;
+
+    const { unmount } = await mount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(restartLocal).toHaveBeenCalledOnce();
+    await unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});

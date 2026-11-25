@@ -1,10 +1,12 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import { useTimeout } from "@rakazo/chat-ui/hooks";
 import type {
   DesktopLocalHostConfig,
   DesktopLocalStackPhase,
   DesktopLocalStackState,
   DesktopServerState,
 } from "@rakazo/contracts";
+import { bestEffort } from "@rakazo/logging/best-effort";
 import { Button, Field, FieldLabel, Input, Label, Switch } from "@rakazo/ui-web";
 import {
   Collapsible,
@@ -146,6 +148,24 @@ export function ServerSettingsPanel() {
       setSavedConfig(true);
     },
   });
+
+  // Matches setup.js: while waiting for a freshly launched local runtime (Kiri or Docker Desktop),
+  // re-probe every 3 seconds until it answers or the user leaves the page.
+  const waitingForRuntime =
+    state?.kind === "local" &&
+    state.localStack.phase === "docker-not-running" &&
+    Boolean(server?.restartLocal) &&
+    !action.pending &&
+    !configSave.pending;
+  useTimeout(
+    () => {
+      if (server?.restartLocal) {
+        void bestEffort("recheck local container runtime", server.restartLocal());
+      }
+    },
+    waitingForRuntime ? 3_000 : null,
+    state?.localStack,
+  );
 
   if (!server) return null;
 
