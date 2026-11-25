@@ -70,7 +70,7 @@ interface Harness {
   /** Links passed to `openLink`. */
   links: string[];
   /** Resolves the oldest pending `state` call, in call order. */
-  resolveAppState: (saved: DesktopSetup | null) => void;
+  resolveAppState: (saved: DesktopSetup | null, defaultLocalUrl?: string) => void;
   /** Resolves the oldest pending `stack.state` call, in call order. */
   resolveStackState: (state: DesktopLocalStackState) => void;
   /** Rejects the oldest pending `stack.state` call. */
@@ -160,10 +160,8 @@ function mount(
     startResult,
     starts: () => starts,
     links,
-    resolveAppState: (next) =>
-      stateCalls
-        .shift()
-        ?.resolve({ defaultLocalUrl: DEFAULT_LOCAL_URL, cloudUrl: CLOUD_URL, saved: next }),
+    resolveAppState: (next, defaultLocalUrl = DEFAULT_LOCAL_URL) =>
+      stateCalls.shift()?.resolve({ defaultLocalUrl, cloudUrl: CLOUD_URL, saved: next }),
     resolveStackState: (state) => stackStateCalls.shift()?.resolve(state),
     rejectStackState: (reason) => stackStateCalls.shift()?.reject(reason),
     pushStackState: (state) => {
@@ -714,5 +712,17 @@ describe("setup", () => {
     ui.startResult.resolve(stackState("pulling"));
     await flush();
     expect(element("stack-phase").textContent).toBe("Downloading Rakazo…");
+  });
+
+  it("refreshes the local URL before auto-saving an already-ready stack", async () => {
+    const ui = mount({ mode: "existing", serverUrl: CLOUD_URL }, ENGLISH, "win32", {
+      autoStartLocal: true,
+    });
+    await flush();
+    ui.resolveStackState(stackState("ready"));
+    await flush();
+    ui.resolveAppState({ mode: "existing", serverUrl: CLOUD_URL }, "http://127.0.0.1:49999");
+    await flush();
+    expect(ui.saves).toEqual([{ mode: "new", serverUrl: "http://127.0.0.1:49999" }]);
   });
 });

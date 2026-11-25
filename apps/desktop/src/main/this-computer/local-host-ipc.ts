@@ -115,6 +115,8 @@ export function registerServerIpc({
   settleLocalStack,
   installApplicationMenu,
 }: ServerIpcDeps) {
+  const supportsNetworkAndImages = () => desktop.localStack.supportsNetworkAndImages !== false;
+
   const readServerState = async (event: IpcCaller): Promise<DesktopServerState> => {
     const managedLocal = isManagedComputerRequest(event);
     const serverUrl = activeServerUrl();
@@ -122,7 +124,18 @@ export function registerServerIpc({
     const loginSupported = supportsLoginItem();
     const startOnLogin =
       managedLocal && loginSupported ? app.getLoginItemSettings().openAtLogin : false;
-    const localConfig = managedLocal ? await readLocalHostConfig(userStackDir) : null;
+    const networkAndImages = managedLocal ? supportsNetworkAndImages() : false;
+    const rawConfig = managedLocal ? await readLocalHostConfig(userStackDir) : null;
+    const localConfig =
+      rawConfig && !networkAndImages
+        ? {
+            ...rawConfig,
+            imageRepo: "",
+            imageTag: "",
+            allowLanAccess: false,
+            publicOrigin: "",
+          }
+        : rawConfig;
     return {
       kind,
       serverUrl,
@@ -131,6 +144,7 @@ export function registerServerIpc({
       localStackRunning: managedLocal ? desktop.localStack.managedStackRunning() : false,
       startOnLogin,
       startOnLoginSupported: managedLocal && loginSupported,
+      localHostSupportsNetworkAndImages: networkAndImages,
       localConfig,
     };
   };
@@ -196,8 +210,29 @@ export function registerServerIpc({
         error: "Local host settings require an app-managed local instance.",
       };
     }
-    const parsed = parseLocalHostConfigInput(payload);
+    const existing = await readLocalHostConfig(userStackDir);
+    if (!isManagedComputerRequest(event)) {
+      return {
+        ok: false,
+        error: "Local host settings require an app-managed local instance.",
+      };
+    }
+    const parsed = parseLocalHostConfigInput(payload, {
+      hasStoredCredentials: existing.objectStorageCredentialsSet === true,
+    });
     if (!parsed.ok) return { ok: false, error: parsed.error };
+    if (
+      !supportsNetworkAndImages() &&
+      (parsed.value.imageRepo !== "" ||
+        parsed.value.imageTag !== "" ||
+        parsed.value.allowLanAccess ||
+        parsed.value.publicOrigin !== "")
+    ) {
+      return {
+        ok: false,
+        error: "Custom container images and network overrides require the Docker local stack.",
+      };
+    }
     try {
       await mkdir(userStackDir, { recursive: true, mode: 0o700 });
       const template = await readFile(path.join(resourceDir, STACK_ENV_TEMPLATE), "utf8");
@@ -216,7 +251,7 @@ export function registerServerIpc({
           error: "Local host settings require an app-managed local instance.",
         };
       }
-      void desktop.localStack.start();
+      void (desktop.localStack.restart ? desktop.localStack.restart() : desktop.localStack.start());
       return { ok: true, state: await readServerState(event) };
     } catch {
       return { ok: false, error: "Could not save local server settings. Try again." };

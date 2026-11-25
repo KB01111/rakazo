@@ -537,7 +537,11 @@
         renderStack(stack);
         if (!TERMINAL_PHASES.has(stack.phase)) void followStack();
         else if (state.autoStartLocal && stack.phase === "ready") {
-          await save("new", defaultLocalUrl);
+          const current = await bridge.state();
+          if (current !== null && selectedMode() === "new") {
+            defaultLocalUrl = current.defaultLocalUrl;
+            await save("new", defaultLocalUrl);
+          }
         }
       } else if (state.autoStartLocal) {
         void runStack();

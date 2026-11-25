@@ -20,7 +20,7 @@ describe("parseLocalHostConfigInput", () => {
       publicOrigin: "rakazo.example.com/path",
       webhookPublicUrl: "https://hooks.example.com/",
       objectStorageBucket: "rakazo-data",
-      objectStorageEndpoint: "https://storage.example.com",
+      objectStorageEndpoint: "https://storage.example.com/s3/",
       objectStorageRegion: "auto",
       objectStorageAccessKeyId: "ak_test",
       objectStorageSecretAccessKey: "sk_test",
@@ -36,7 +36,7 @@ describe("parseLocalHostConfigInput", () => {
         publicOrigin: "https://rakazo.example.com",
         webhookPublicUrl: "https://hooks.example.com",
         objectStorageBucket: "rakazo-data",
-        objectStorageEndpoint: "https://storage.example.com",
+        objectStorageEndpoint: "https://storage.example.com/s3",
         objectStorageRegion: "auto",
         objectStorageAccessKeyId: "ak_test",
         objectStorageSecretAccessKey: "sk_test",
@@ -46,12 +46,31 @@ describe("parseLocalHostConfigInput", () => {
     });
   });
 
+  it("allows keeping stored object storage credentials when both key fields are left blank", () => {
+    const parsed = parseLocalHostConfigInput(
+      {
+        ...DEFAULT_LOCAL_HOST_CONFIG,
+        objectStorageBucket: "rakazo-data",
+        objectStorageEndpoint: "https://storage.example.com/s3",
+      },
+      { hasStoredCredentials: true },
+    );
+    expect(parsed.ok).toBe(true);
+  });
+
   it.each([
     ["an invalid image repository", { imageRepo: "GHCR.IO/Bad Repo" }],
     ["an invalid image tag", { imageTag: "edge;rm -rf /" }],
     ["a cleartext public origin", { publicOrigin: "http://example.com" }],
     ["a non-HTTPS webhook URL", { webhookPublicUrl: "http://127.0.0.1:3101" }],
     ["partial object storage without endpoint", { objectStorageBucket: "only-bucket" }],
+    [
+      "a new bucket without credentials",
+      {
+        objectStorageBucket: "bucket",
+        objectStorageEndpoint: "https://storage.example.com",
+      },
+    ],
     [
       "one-sided object storage credentials",
       {
@@ -61,6 +80,7 @@ describe("parseLocalHostConfigInput", () => {
       },
     ],
     ["out-of-range worker concurrency", { workerConcurrency: "99" }],
+    ["database pool size below the worker minimum", { dbPoolMax: "5" }],
     ["non-numeric database pool size", { dbPoolMax: "abc" }],
   ])("rejects %s", (_label, patch) => {
     const parsed = parseLocalHostConfigInput({ ...DEFAULT_LOCAL_HOST_CONFIG, ...patch });

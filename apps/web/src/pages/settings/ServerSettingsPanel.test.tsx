@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { DesktopLocalStackState, DesktopServerState, RakazoDesktop } from "@rakazo/contracts";
+import { deferred } from "@rakazo/core/test-async";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -198,5 +199,63 @@ it("manages local services, login launch, live progress and hosting options when
     pushStack?.({ ...stack("pulling"), output: ["Pulling api"] });
   });
   expect(container.querySelector('[data-testid="local-stack-progress"]')).not.toBeNull();
+  await unmount();
+});
+
+it("hides container/network options when unsupported and disables save while restart is pending", async () => {
+  const pendingRestart = deferred<DesktopServerState | null>();
+  const localState: DesktopServerState = {
+    kind: "local",
+    serverUrl: "http://127.0.0.1:45173",
+    localWebUrl: "http://127.0.0.1:45173",
+    localStack: stack("ready"),
+    localStackRunning: true,
+    startOnLogin: false,
+    startOnLoginSupported: true,
+    localHostSupportsNetworkAndImages: false,
+    localConfig: {
+      imageRepo: "",
+      imageTag: "",
+      allowLanAccess: false,
+      publicOrigin: "",
+      webhookPublicUrl: "",
+      objectStorageBucket: "",
+      objectStorageEndpoint: "",
+      objectStorageRegion: "",
+      objectStorageCredentialsSet: false,
+      workerConcurrency: "",
+      dbPoolMax: "",
+    },
+  };
+  window.rakazoDesktop = {
+    platform: "darwin",
+    server: {
+      change: vi.fn(async () => undefined),
+      state: vi.fn(async () => localState),
+      restartLocal: vi.fn(() => pendingRestart.promise),
+      stopLocal: vi.fn(async () => localState),
+      saveLocalConfig: vi.fn(async () => ({ ok: true, state: localState })),
+      onLocalStackChange: () => () => undefined,
+    },
+  } as unknown as RakazoDesktop;
+
+  const { container, unmount } = await mount();
+  expect(container.querySelector('[data-testid="allow-lan-access-toggle"]')).toBeNull();
+
+  const restartButton = container.querySelector<HTMLButtonElement>(
+    '[data-testid="local-stack-restart"]',
+  );
+  const saveButton = container.querySelector<HTMLButtonElement>(
+    '[data-testid="local-host-config-form"] button[type="submit"]',
+  );
+  expect(saveButton?.disabled).toBe(false);
+  await act(async () => {
+    restartButton?.click();
+  });
+  expect(saveButton?.disabled).toBe(true);
+  await act(async () => {
+    pendingRestart.resolve(localState);
+  });
+  expect(saveButton?.disabled).toBe(false);
   await unmount();
 });

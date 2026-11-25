@@ -267,6 +267,8 @@ export interface DesktopServerState {
   localStackRunning: boolean;
   startOnLogin: boolean;
   startOnLoginSupported: boolean;
+  /** Whether the active local stack supports custom container images and LAN/public origin overrides. */
+  localHostSupportsNetworkAndImages?: boolean;
   /** Present only when connected to the app-managed local instance. */
   localConfig: DesktopLocalHostConfig | null;
 }

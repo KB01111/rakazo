@@ -377,12 +377,16 @@ export interface LocalStackDeps {
 
 /** What the app needs from whichever controller runs This computer. */
 export interface StackController {
+  /** Whether this stack applies custom container image and LAN/public-origin overrides. */
+  readonly supportsNetworkAndImages?: boolean;
   webUrl(): string;
   state(): DesktopLocalStackState;
   matchesDesiredStack(): Promise<boolean>;
   /** True while a stack this app manages may still be running, so the menu offers its off-switch. */
   managedStackRunning(): boolean;
   start(): Promise<DesktopLocalStackState>;
+  /** Cancels any in-flight start and runs a fresh attempt so newly saved config is always applied. */
+  restart?(): Promise<DesktopLocalStackState>;
   stop(): Promise<DesktopLocalStackState>;
   abort(): void;
 }
@@ -407,6 +411,7 @@ export function defaultSleep(ms: number, signal: AbortSignal) {
  * the attempt, how a thrown attempt fails, and what stopping does.
  */
 export abstract class StackLifecycle implements StackController {
+  readonly supportsNetworkAndImages: boolean = false;
   protected current: DesktopLocalStackState;
   protected currentWebUrl: string;
   private running: Promise<DesktopLocalStackState> | null = null;
@@ -447,6 +452,22 @@ export abstract class StackLifecycle implements StackController {
     if (this.running !== null) return this.running;
     const ticket = ++this.ticket;
     const attempt = (this.stopping ?? Promise.resolve())
+      .then(() => (ticket <= this.voidBefore ? this.current : this.run()))
+      .finally(() => {
+        if (this.running === attempt) this.running = null;
+      });
+    this.running = attempt;
+    return attempt;
+  }
+
+  /** Cancels any in-flight start so newly saved config is always loaded in a fresh attempt. */
+  restart(): Promise<DesktopLocalStackState> {
+    const previous = this.running;
+    if (previous === null) return this.start();
+    this.abort();
+    this.running = null;
+    const ticket = ++this.ticket;
+    const attempt = Promise.allSettled([this.stopping, previous])
       .then(() => (ticket <= this.voidBefore ? this.current : this.run()))
       .finally(() => {
         if (this.running === attempt) this.running = null;
@@ -514,6 +535,7 @@ export abstract class StackLifecycle implements StackController {
  * uses a fixed argv and an allowlisted environment; the setup window polls `state()`.
  */
 export class LocalStackController extends StackLifecycle {
+  override readonly supportsNetworkAndImages = true;
   private currentStackToken: string | null = null;
   private activeLocalConfig: DesktopLocalHostConfig = DEFAULT_LOCAL_HOST_CONFIG;
   /** Set once setup has tried to start the Docker app, so a re-check never reopens it on top of the person's work. */

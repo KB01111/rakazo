@@ -182,6 +182,7 @@ export function ServerSettingsPanel() {
   const running = state.kind === "local" && (state.localStackRunning || stack.phase === "ready");
   const showStackStatus =
     state.kind === "local" && stack.phase !== "idle" && stack.phase !== "ready";
+  const supportsNetworkAndImages = state.localHostSupportsNetworkAndImages !== false;
 
   const serverTitle =
     state.kind === "local"
@@ -222,7 +223,9 @@ export function ServerSettingsPanel() {
             <>
               <p className="break-words">{serverTitle}</p>
               <p className="mt-0.5 break-all text-body-sm text-muted-foreground">
-                {state.localConfig?.publicOrigin || state.serverUrl}
+                {supportsNetworkAndImages
+                  ? state.localConfig?.publicOrigin || state.serverUrl
+                  : state.serverUrl}
               </p>
             </>
           }
@@ -405,7 +408,8 @@ export function ServerSettingsPanel() {
             <LocalHostConfigForm
               draft={draft}
               lanSwitchId={lanSwitchId}
-              pending={configSave.pending || starting}
+              supportsNetworkAndImages={supportsNetworkAndImages}
+              pending={configSave.pending || action.pending || starting}
               error={configSave.error?.message ?? null}
               saved={savedConfig}
               onChange={(patch) => {
@@ -428,6 +432,7 @@ export function ServerSettingsPanel() {
 function LocalHostConfigForm({
   draft,
   lanSwitchId,
+  supportsNetworkAndImages,
   pending,
   error,
   saved,
@@ -437,6 +442,7 @@ function LocalHostConfigForm({
 }: {
   draft: DesktopLocalHostConfig;
   lanSwitchId: string;
+  supportsNetworkAndImages: boolean;
   pending: boolean;
   error: string | null;
   saved: boolean;
@@ -456,61 +462,65 @@ function LocalHostConfigForm({
       }}
     >
       <fieldset className="grid gap-3" disabled={pending}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field>
-            <FieldLabel htmlFor={`${baseId}-repo`}>
-              <Trans>Image repository</Trans>
-            </FieldLabel>
-            <Input
-              id={`${baseId}-repo`}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="ghcr.io/owner/rakazo"
-              value={draft.imageRepo}
-              onChange={(event) => onChange({ imageRepo: event.target.value })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`${baseId}-tag`}>
-              <Trans>Image tag</Trans>
-            </FieldLabel>
-            <Input
-              id={`${baseId}-tag`}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="edge"
-              value={draft.imageTag}
-              onChange={(event) => onChange({ imageTag: event.target.value })}
-            />
-          </Field>
-        </div>
+        {supportsNetworkAndImages ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor={`${baseId}-repo`}>
+                  <Trans>Image repository</Trans>
+                </FieldLabel>
+                <Input
+                  id={`${baseId}-repo`}
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder="ghcr.io/owner/rakazo"
+                  value={draft.imageRepo}
+                  onChange={(event) => onChange({ imageRepo: event.target.value })}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`${baseId}-tag`}>
+                  <Trans>Image tag</Trans>
+                </FieldLabel>
+                <Input
+                  id={`${baseId}-tag`}
+                  spellCheck={false}
+                  autoComplete="off"
+                  placeholder="edge"
+                  value={draft.imageTag}
+                  onChange={(event) => onChange({ imageTag: event.target.value })}
+                />
+              </Field>
+            </div>
 
-        <div className="flex items-center justify-between gap-4 py-1">
-          <Label htmlFor={lanSwitchId} className="text-body font-normal text-foreground">
-            <Trans>Allow local network access</Trans>
-          </Label>
-          <Switch
-            id={lanSwitchId}
-            data-testid="allow-lan-access-toggle"
-            checked={draft.allowLanAccess}
-            onCheckedChange={(allowLanAccess) => onChange({ allowLanAccess })}
-          />
-        </div>
+            <div className="flex items-center justify-between gap-4 py-1">
+              <Label htmlFor={lanSwitchId} className="text-body font-normal text-foreground">
+                <Trans>Allow local network access</Trans>
+              </Label>
+              <Switch
+                id={lanSwitchId}
+                data-testid="allow-lan-access-toggle"
+                checked={draft.allowLanAccess}
+                onCheckedChange={(allowLanAccess) => onChange({ allowLanAccess })}
+              />
+            </div>
 
-        <Field>
-          <FieldLabel htmlFor={`${baseId}-public`}>
-            <Trans>Public or tailnet URL</Trans>
-          </FieldLabel>
-          <Input
-            id={`${baseId}-public`}
-            type="url"
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="https://machine.example.ts.net"
-            value={draft.publicOrigin}
-            onChange={(event) => onChange({ publicOrigin: event.target.value })}
-          />
-        </Field>
+            <Field>
+              <FieldLabel htmlFor={`${baseId}-public`}>
+                <Trans>Public or tailnet URL</Trans>
+              </FieldLabel>
+              <Input
+                id={`${baseId}-public`}
+                type="url"
+                spellCheck={false}
+                autoComplete="off"
+                placeholder="https://machine.example.ts.net"
+                value={draft.publicOrigin}
+                onChange={(event) => onChange({ publicOrigin: event.target.value })}
+              />
+            </Field>
+          </>
+        ) : null}
 
         <Field>
           <FieldLabel htmlFor={`${baseId}-webhook`}>

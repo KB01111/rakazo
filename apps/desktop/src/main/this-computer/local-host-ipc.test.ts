@@ -60,6 +60,7 @@ let stackDir: string;
 let resourceDir: string;
 let stackState: DesktopLocalStackState;
 const startStack = vi.fn();
+const restartStack = vi.fn();
 const stopStack = vi.fn();
 const settleLocalStack = vi.fn();
 const installApplicationMenu = vi.fn();
@@ -81,17 +82,20 @@ beforeEach(async () => {
   mocks.openPath.mockReset().mockResolvedValue("");
   stackState = { phase: "idle", message: null, output: [], layerBytes: {}, imageTag: "edge" };
   startStack.mockReset().mockImplementation(async () => stackState);
+  restartStack.mockReset().mockImplementation(async () => stackState);
   stopStack.mockReset().mockImplementation(async () => stackState);
   settleLocalStack.mockReset().mockResolvedValue(undefined);
   installApplicationMenu.mockReset();
   desktop.autoStartLocalSetup = false;
   desktop.setupWindow = null;
   desktop.localStack = {
+    supportsNetworkAndImages: true,
     webUrl: () => LOCAL_URL,
     state: () => stackState,
     matchesDesiredStack: vi.fn(async () => false),
     managedStackRunning: () => stackState.phase === "ready",
     start: startStack,
+    restart: restartStack,
     stop: stopStack,
     abort: vi.fn(),
   };
@@ -215,9 +219,35 @@ describe("desktop server IPC", () => {
         },
       },
     });
-    expect(startStack).toHaveBeenCalledOnce();
+    expect(restartStack).toHaveBeenCalledOnce();
     const env = await readFile(path.join(stackDir, STACK_ENV_FILE), "utf8");
     expect(env).toContain("RAKAZO_IMAGE=ghcr.io/example-org/rakazo/app");
     expect(env).toContain("GRAPHILE_WORKER_CONCURRENCY=2");
+  });
+
+  it("rejects network/image overrides when the local stack does not support them", async () => {
+    const appWin = fakeAppWindow(LOCAL_URL);
+    desktop.mainWindow = appWin.win;
+    desktop.currentSetup = { mode: "new", serverUrl: LOCAL_URL };
+    desktop.currentTargetUrl = LOCAL_URL;
+    desktop.localStack = { ...desktop.localStack, supportsNetworkAndImages: false };
+
+    const state = await mocks.invoke.get("desktop.server.state")?.(appWin.event);
+    expect(state).toMatchObject({ localHostSupportsNetworkAndImages: false });
+
+    const rejected = await mocks.invoke.get("desktop.server.saveLocalConfig")?.(appWin.event, {
+      imageRepo: "",
+      imageTag: "",
+      allowLanAccess: true,
+      publicOrigin: "https://pc.example.ts.net",
+      webhookPublicUrl: "",
+      objectStorageBucket: "",
+      objectStorageEndpoint: "",
+      objectStorageRegion: "",
+      workerConcurrency: "",
+      dbPoolMax: "",
+    });
+    expect(rejected).toMatchObject({ ok: false });
+    expect(restartStack).not.toHaveBeenCalled();
   });
 });

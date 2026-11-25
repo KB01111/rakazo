@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopLocalHostConfig } from "@rakazo/contracts";
+import { isPrivateNetworkHost } from "@rakazo/contracts/network-host";
 import { normalizeServerUrl } from "../setup/setup-config.js";
 import { readPrivateFile, writePrivateFile } from "../setup/setup-store.js";
 
@@ -13,6 +14,7 @@ const IMAGE_REPO = /^[a-z0-9](?:[a-z0-9._/-]*[a-z0-9])?$/;
 const IMAGE_TAG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const BUCKET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const REGION_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//;
 
 function hasControlChar(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -84,8 +86,36 @@ export function normalizeImageRepo(raw: string): string | null {
   return stripped;
 }
 
+/**
+ * Normalizes an S3-compatible endpoint URL while preserving any path prefix
+ * (unlike `normalizeServerUrl`, which keeps only the origin).
+ */
+function normalizeEndpointUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (trimmed === "") return null;
+  let url: URL;
+  try {
+    if (SCHEME.test(trimmed)) {
+      url = new URL(trimmed);
+    } else {
+      const candidate = new URL(`http://${trimmed}`);
+      url = isPrivateNetworkHost(candidate.hostname) ? candidate : new URL(`https://${trimmed}`);
+    }
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  if (url.hostname === "") return null;
+  if (url.username !== "" || url.password !== "") return null;
+  if (url.search !== "" || url.hash !== "") return null;
+  if (url.protocol === "http:" && !isPrivateNetworkHost(url.hostname)) return null;
+  const pathname = url.pathname.replace(/\/+$/, "");
+  return pathname ? `${url.origin}${pathname}` : url.origin;
+}
+
 export function parseLocalHostConfigInput(
   value: unknown,
+  options: { hasStoredCredentials?: boolean } = {},
 ): { ok: true; value: DesktopLocalHostConfig } | { ok: false; error: string } {
   if (typeof value !== "object" || value === null) {
     return { ok: false, error: "Invalid local server settings." };
@@ -156,7 +186,7 @@ export function parseLocalHostConfigInput(
   }
   let objectStorageEndpoint = "";
   if (rawEndpoint !== "") {
-    const normalized = normalizeServerUrl(rawEndpoint);
+    const normalized = normalizeEndpointUrl(rawEndpoint);
     if (normalized === null) {
       return { ok: false, error: "Enter a valid object storage endpoint URL." };
     }
@@ -186,14 +216,20 @@ export function parseLocalHostConfigInput(
       error: "Enter both the access key ID and secret access key together.",
     };
   }
+  if (hasAnyStorage && !rawAccessKey && !rawSecretKey && !options.hasStoredCredentials) {
+    return {
+      ok: false,
+      error: "Enter an access key ID and secret access key to configure object storage.",
+    };
+  }
 
   const workerConcurrency = parseBoundedInt(rawWorkerConcurrency, 1, 64);
   if (workerConcurrency === null) {
     return { ok: false, error: "Worker concurrency must be a whole number between 1 and 64." };
   }
-  const dbPoolMax = parseBoundedInt(rawDbPoolMax, 1, 100);
+  const dbPoolMax = parseBoundedInt(rawDbPoolMax, 6, 100);
   if (dbPoolMax === null) {
-    return { ok: false, error: "Database pool size must be a whole number between 1 and 100." };
+    return { ok: false, error: "Database pool size must be a whole number between 6 and 100." };
   }
 
   return {
@@ -278,7 +314,7 @@ export async function readLocalHostConfig(dir: string): Promise<DesktopLocalHost
   );
   const workerConcurrency =
     parseBoundedInt(env.get("GRAPHILE_WORKER_CONCURRENCY") ?? "", 1, 64) ?? "";
-  const dbPoolMax = parseBoundedInt(env.get("DB_POOL_MAX") ?? "", 1, 100) ?? "";
+  const dbPoolMax = parseBoundedInt(env.get("DB_POOL_MAX") ?? "", 6, 100) ?? "";
 
   return {
     imageRepo,
