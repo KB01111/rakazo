@@ -231,4 +231,8 @@ export const HI_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "Rakazo रीस्टार्ट करें",
   "Not Now": "अभी नहीं",
   "Restart Rakazo to finish setup": "सेटअप पूरा करने के लिए Rakazo रीस्टार्ट करें",
+  "Host Rakazo on this computer?": "क्या इस कंप्यूटर पर Rakazo होस्ट करें?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo इस कंप्यूटर पर अपनी लोकल सेवाएँ शुरू करेगा और {host} से स्विच करेगा।",
+  "Start local server": "लोकल सर्वर शुरू करें",
 };

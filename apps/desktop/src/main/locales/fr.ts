@@ -239,4 +239,8 @@ export const FR_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "Redémarrer Rakazo",
   "Not Now": "Pas maintenant",
   "Restart Rakazo to finish setup": "Redémarrez Rakazo pour terminer la configuration",
+  "Host Rakazo on this computer?": "Héberger Rakazo sur cet ordinateur ?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo démarrera ses services locaux sur cet ordinateur et quittera {host}.",
+  "Start local server": "Démarrer le serveur local",
 };

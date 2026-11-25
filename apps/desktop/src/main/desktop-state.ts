@@ -14,6 +14,7 @@ export const desktop = {
   currentSetup: null,
   currentTargetUrl: null,
   setupError: null,
+  autoStartLocalSetup: false,
   quitting: false,
   warmWindowTimer: undefined,
   // Number of short-lived hidden probe windows currently alive. On Windows/Linux,
@@ -35,6 +36,8 @@ export const desktop = {
   currentSetup: DesktopSetup | null;
   currentTargetUrl: string | null;
   setupError: string | null;
+  /** Consumed when the setup window initializes after a 1-click local host action. */
+  autoStartLocalSetup: boolean;
   quitting: boolean;
   warmWindowTimer: NodeJS.Timeout | undefined;
   liveProbeWindows: number;

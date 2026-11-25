@@ -97,6 +97,24 @@ describe("desktop preload bridge", () => {
     await bridge.update.download();
     await bridge.update.install();
     await bridge.server!.change();
+    await bridge.server!.state?.();
+    await bridge.server!.hostLocally?.();
+    await bridge.server!.restartLocal?.();
+    await bridge.server!.stopLocal?.();
+    await bridge.server!.saveLocalConfig?.({
+      imageRepo: "",
+      imageTag: "",
+      allowLanAccess: false,
+      publicOrigin: "",
+      webhookPublicUrl: "",
+      objectStorageBucket: "",
+      objectStorageEndpoint: "",
+      objectStorageRegion: "",
+      workerConcurrency: "",
+      dbPoolMax: "",
+    });
+    await bridge.server!.setStartOnLogin?.(true);
+    await bridge.server!.openStackFolder?.();
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       "desktop.badge.set",
       "desktop.clipboard.write",
@@ -116,7 +134,33 @@ describe("desktop preload bridge", () => {
       "desktop.update.download",
       "desktop.update.install",
       "desktop.server.change",
+      "desktop.server.state",
+      "desktop.server.hostLocally",
+      "desktop.server.restartLocal",
+      "desktop.server.stopLocal",
+      "desktop.server.saveLocalConfig",
+      "desktop.server.setStartOnLogin",
+      "desktop.server.openStackFolder",
     ]);
+  });
+
+  it("forwards local stack updates without leaking the IPC event", () => {
+    const listeners: Array<(event: unknown, state: unknown) => void> = [];
+    const on = vi.fn((_channel: string, handler: (event: unknown, state: unknown) => void) => {
+      listeners.push(handler);
+    });
+    const off = vi.fn();
+    const { exposeInMainWorld } = runPreload("preload.cjs", { on, off });
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+    const received: unknown[] = [];
+    const unsubscribe = bridge.server!.onLocalStackChange!((state) => received.push(state));
+
+    expect(on).toHaveBeenCalledWith("desktop.server.localStack.changed", expect.any(Function));
+    listeners[0]?.({ sender: "ipc-event" }, { phase: "pulling" });
+    expect(received).toEqual([{ phase: "pulling" }]);
+
+    unsubscribe();
+    expect(off).toHaveBeenCalledWith("desktop.server.localStack.changed", expect.any(Function));
   });
 
   it("forwards captured MCP codes without leaking the IPC event to the renderer", async () => {

@@ -47,6 +47,7 @@ import { MessagingSettingsPanel } from "./MessagingSettingsPanel";
 import type { OrganizationPage } from "./OrganizationSettingsPanel";
 import { OrganizationOptionsMenu, OrganizationSettingsPanel } from "./OrganizationSettingsPanel";
 import { PaymentWalletSettingsPanel } from "./PaymentWalletSettingsPanel";
+import { ServerSettingsPanel } from "./ServerSettingsPanel";
 import { SpaceSettingsPanel } from "./SpaceSettingsPanel";
 import { SpacesSettingsPanel } from "./SpacesSettingsPanel";
 import { useSettingsNavItems } from "./settings-nav";
@@ -157,6 +158,7 @@ export function SettingsOverlay({
     devices.isError ||
     thisComputer !== null ||
     plainHttp;
+  const showServer = Boolean(desktopBridge()?.server);
   const showUpdates = Boolean(desktopBridge()?.update);
   // A section that isn't available yet (billing before its flag loads) shows General until it is.
   const section =
@@ -164,6 +166,7 @@ export function SettingsOverlay({
     (requestedSection === "billing" && !billingEnabled) ||
     (requestedSection === "messaging" && !messagingEnabled) ||
     (requestedSection === "wallet" && !paymentWalletProvider) ||
+    (requestedSection === "server" && !showServer) ||
     (requestedSection === "updates" && !showUpdates) ||
     (requestedSection === "labs" && labsAvailable.length === 0)
       ? "general"
@@ -193,6 +196,7 @@ export function SettingsOverlay({
     wallet: Boolean(paymentWalletProvider),
     computer: showComputer,
     billing: billingEnabled,
+    server: showServer,
     updates: showUpdates,
     labs: labsAvailable.length > 0,
   });
@@ -229,6 +233,7 @@ export function SettingsOverlay({
     billingEnabled,
     messagingEnabled,
     paymentWalletProvider,
+    showServer,
     showUpdates,
     i18n.locale,
   ]);
@@ -493,6 +498,7 @@ export function SettingsOverlay({
                   {section === "billing" && billingEnabled ? (
                     <BillingSettingsPanel client={shellRpc} />
                   ) : null}
+                  {section === "server" && showServer ? <ServerSettingsPanel /> : null}
                   {section === "updates" && showUpdates ? <UpdatesSettingsPanel /> : null}
                   {section === "models" ? (
                     <ModelSettingsOverlay embedded scope="account" onClose={requestClose} />

@@ -93,6 +93,7 @@ import {
   screenDriverInstaller,
   screenDriverRelease,
 } from "./this-computer/host-screen.js";
+import { broadcastLocalStackState, registerServerIpc } from "./this-computer/local-host-ipc.js";
 import {
   createLocalComputerChoice,
   saveLocalComputerHost,
@@ -696,11 +697,7 @@ app.whenReady().then(async () => {
   // Must exist before the stack controller: its lifecycle transitions refresh the stop item.
   const stopStackMenu = new StackStopMenuAvailability(() => installApplicationMenu());
   const onState = (state: DesktopLocalStackState) => {
-    if (desktop.setupWindow !== null && !desktop.setupWindow.isDestroyed()) {
-      desktop.setupWindow.webContents.send("desktop.setup.stack.changed", state);
-    }
-    // A stack can start or stop without a server switch; its phase transitions refresh
-    // the stop item.
+    broadcastLocalStackState(state);
     stopStackMenu.stackChanged(state.phase);
   };
   const serverBundle = nativeStackEligible({
@@ -877,8 +874,12 @@ app.whenReady().then(async () => {
   );
   handleIpc("desktop.passkeys.rpIds", () => passkeyRpIds);
   handleIpc("desktop.monitoring.enabled", () => reportsErrors);
-  handleIpc("desktop.server.change", () => {
-    showSetupWindow();
+  registerServerIpc({
+    userStackDir,
+    resourceDir,
+    randomHex,
+    settleLocalStack,
+    installApplicationMenu,
   });
   registerWindowControls();
   const updateState = () => desktop.desktopUpdater.state();

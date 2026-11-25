@@ -219,4 +219,8 @@ export const ZH_CN_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "重新启动 Rakazo",
   "Not Now": "暂不",
   "Restart Rakazo to finish setup": "重新启动 Rakazo 以完成设置",
+  "Host Rakazo on this computer?": "在此电脑上托管 Rakazo？",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo 将在此电脑上启动本地服务，并从 {host} 切换过来。",
+  "Start local server": "启动本地服务器",
 };

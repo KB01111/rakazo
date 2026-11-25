@@ -241,4 +241,8 @@ export const JA_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "Rakazoを再起動",
   "Not Now": "今はしない",
   "Restart Rakazo to finish setup": "Rakazoを再起動して設定を完了",
+  "Host Rakazo on this computer?": "このコンピュータで Rakazo をホストしますか？",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo はこのコンピュータでローカルサービスを起動し、{host} から切り替えます。",
+  "Start local server": "ローカルサーバを起動",
 };

@@ -14,6 +14,7 @@ const SETTINGS_SECTIONS = [
   "computer",
   "labs",
   "billing",
+  "server",
   "updates",
 ] as const;
 

@@ -135,6 +135,25 @@ export interface RakazoDesktop {
   server?: {
     /** Opens the desktop setup window to pick another Rakazo server. */
     change: () => Promise<void>;
+    /** Current server connection and local self-host status. */
+    state?: () => Promise<DesktopServerState | null>;
+    /**
+     * One-click auto setup: starts the local Rakazo stack on this computer and
+     * switches the desktop app to it.
+     */
+    hostLocally?: () => Promise<DesktopServerState | null>;
+    /** Starts or reconciles the managed local stack from the managed local instance. */
+    restartLocal?: () => Promise<DesktopServerState | null>;
+    /** Stops the managed local stack from the managed local instance. */
+    stopLocal?: () => Promise<DesktopServerState | null>;
+    /** Saves local stack configuration and restarts the managed local stack to apply it. */
+    saveLocalConfig?: (config: DesktopLocalHostConfig) => Promise<DesktopLocalConfigSaveResult>;
+    /** Sets whether Rakazo starts automatically on OS sign-in (managed local instance only). */
+    setStartOnLogin?: (enabled: boolean) => Promise<DesktopServerState | null>;
+    /** Opens the managed local stack folder in the OS file manager. */
+    openStackFolder?: () => Promise<void>;
+    /** Fires whenever the managed local stack phase or output changes. */
+    onLocalStackChange?: (listener: (state: DesktopLocalStackState) => void) => () => void;
   };
   /** Absent on older desktop releases, which have no Settings… menu item. */
   settings?: {
@@ -205,6 +224,61 @@ export interface DesktopSetup {
   headers?: Record<string, string>;
 }
 
+export type DesktopServerKind = "cloud" | "local" | "existing";
+
+/**
+ * Editable local-host settings stored beside the managed stack's `.env`.
+ * Secrets are write-only; `state()` only reports whether they are configured.
+ */
+export interface DesktopLocalHostConfig {
+  /** Container image repository prefix (e.g. `ghcr.io/owner/rakazo`). Empty uses the template default. */
+  imageRepo: string;
+  /** Container image tag override (e.g. `edge`, `latest`, `v0.15.0`). Empty uses the app default. */
+  imageTag: string;
+  /** Bind the local web proxy on `0.0.0.0` so devices on the local network can reach it. */
+  allowLanAccess: boolean;
+  /** Optional public or tailnet origin (e.g. `https://machine.tailnet.ts.net`). */
+  publicOrigin: string;
+  /** Optional public HTTPS origin forwarded to the API's inbound webhook port (`3101`). */
+  webhookPublicUrl: string;
+  /** Optional S3-compatible object storage bucket for bot homes and backups. */
+  objectStorageBucket: string;
+  /** Optional S3-compatible object storage endpoint URL. */
+  objectStorageEndpoint: string;
+  /** Optional S3-compatible object storage region (e.g. `auto`). */
+  objectStorageRegion: string;
+  /** Write-only on save; never returned by `state()`. */
+  objectStorageAccessKeyId?: string;
+  /** Write-only on save; never returned by `state()`. */
+  objectStorageSecretAccessKey?: string;
+  /** True when S3-compatible access credentials are stored in the stack `.env`. */
+  objectStorageCredentialsSet?: boolean;
+  /** Optional Graphile Worker concurrency limit (empty uses default). */
+  workerConcurrency: string;
+  /** Optional Postgres connection pool limit (empty uses default). */
+  dbPoolMax: string;
+}
+
+export interface DesktopServerState {
+  kind: DesktopServerKind;
+  serverUrl: string;
+  localWebUrl: string;
+  localStack: DesktopLocalStackState;
+  localStackRunning: boolean;
+  startOnLogin: boolean;
+  startOnLoginSupported: boolean;
+  /** Whether the active local stack supports custom container images and LAN/public origin overrides. */
+  localHostSupportsNetworkAndImages?: boolean;
+  /** Present only when connected to the app-managed local instance. */
+  localConfig: DesktopLocalHostConfig | null;
+}
+
+export interface DesktopLocalConfigSaveResult {
+  ok: boolean;
+  error?: string;
+  state?: DesktopServerState | null;
+}
+
 export interface DesktopSetupState {
   defaultLocalUrl: string;
   /** Hosted Rakazo origin, saved as an `existing` server when chosen. */
@@ -212,6 +286,8 @@ export interface DesktopSetupState {
   saved: DesktopSetup | null;
   /** Present when a saved or newly selected server could not be reopened. */
   error?: string;
+  /** True when setup was opened to immediately run local self-host setup. */
+  autoStartLocal?: boolean;
 }
 
 export interface DesktopReachability {

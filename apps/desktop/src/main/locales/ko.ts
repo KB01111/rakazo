@@ -235,4 +235,8 @@ export const KO_MESSAGES: Record<string, string> = {
   "Restart Rakazo": "Rakazo 재시동",
   "Not Now": "나중에",
   "Restart Rakazo to finish setup": "Rakazo를 재시동하여 설정 완료",
+  "Host Rakazo on this computer?": "이 컴퓨터에서 Rakazo를 호스팅할까요?",
+  "Rakazo will start its local services on this computer and switch away from {host}.":
+    "Rakazo가 이 컴퓨터에서 로컬 서비스를 시작하고 {host}에서 전환합니다.",
+  "Start local server": "로컬 서버 시작",
 };

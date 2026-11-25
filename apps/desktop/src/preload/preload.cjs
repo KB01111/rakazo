@@ -29,6 +29,19 @@ contextBridge.exposeInMainWorld("rakazoDesktop", {
   },
   server: {
     change: () => ipcRenderer.invoke("desktop.server.change"),
+    state: () => ipcRenderer.invoke("desktop.server.state"),
+    hostLocally: () => ipcRenderer.invoke("desktop.server.hostLocally"),
+    restartLocal: () => ipcRenderer.invoke("desktop.server.restartLocal"),
+    stopLocal: () => ipcRenderer.invoke("desktop.server.stopLocal"),
+    saveLocalConfig: (config) => ipcRenderer.invoke("desktop.server.saveLocalConfig", config),
+    setStartOnLogin: (enabled) => ipcRenderer.invoke("desktop.server.setStartOnLogin", enabled),
+    openStackFolder: () => ipcRenderer.invoke("desktop.server.openStackFolder"),
+    onLocalStackChange: (listener) => {
+      // The IpcRendererEvent stays in the preload: the renderer only sees the stack state.
+      const handler = (_event, state) => listener(state);
+      ipcRenderer.on("desktop.server.localStack.changed", handler);
+      return () => ipcRenderer.off("desktop.server.localStack.changed", handler);
+    },
   },
   settings: {
     onOpen: subscribe("desktop.settings.open"),

@@ -70,7 +70,7 @@ interface Harness {
   /** Links passed to `openLink`. */
   links: string[];
   /** Resolves the oldest pending `state` call, in call order. */
-  resolveAppState: (saved: DesktopSetup | null) => void;
+  resolveAppState: (saved: DesktopSetup | null, defaultLocalUrl?: string) => void;
   /** Resolves the oldest pending `stack.state` call, in call order. */
   resolveStackState: (state: DesktopLocalStackState) => void;
   /** Rejects the oldest pending `stack.state` call. */
@@ -83,7 +83,12 @@ interface Harness {
   resolveSave: (result: DesktopSetupResult) => void;
 }
 
-function mount(saved: DesktopSetup | null, locale = ENGLISH, platform = "linux"): Harness {
+function mount(
+  saved: DesktopSetup | null,
+  locale = ENGLISH,
+  platform = "linux",
+  extraState: Partial<DesktopSetupState> = {},
+): Harness {
   document.body.innerHTML = setupBody ?? "";
   const checkCalls: Array<Deferred<DesktopReachability>> = [];
   const startResult = deferred<DesktopLocalStackState>();
@@ -139,7 +144,12 @@ function mount(saved: DesktopSetup | null, locale = ENGLISH, platform = "linux")
   new Function(setupScript)();
 
   const initState = stateCalls.shift();
-  initState?.resolve({ defaultLocalUrl: DEFAULT_LOCAL_URL, cloudUrl: CLOUD_URL, saved });
+  initState?.resolve({
+    defaultLocalUrl: DEFAULT_LOCAL_URL,
+    cloudUrl: CLOUD_URL,
+    saved,
+    ...extraState,
+  });
   return {
     nextCheck: () => {
       const call = checkCalls.shift();
@@ -150,10 +160,8 @@ function mount(saved: DesktopSetup | null, locale = ENGLISH, platform = "linux")
     startResult,
     starts: () => starts,
     links,
-    resolveAppState: (next) =>
-      stateCalls
-        .shift()
-        ?.resolve({ defaultLocalUrl: DEFAULT_LOCAL_URL, cloudUrl: CLOUD_URL, saved: next }),
+    resolveAppState: (next, defaultLocalUrl = DEFAULT_LOCAL_URL) =>
+      stateCalls.shift()?.resolve({ defaultLocalUrl, cloudUrl: CLOUD_URL, saved: next }),
     resolveStackState: (state) => stackStateCalls.shift()?.resolve(state),
     rejectStackState: (reason) => stackStateCalls.shift()?.reject(reason),
     pushStackState: (state) => {
@@ -688,5 +696,33 @@ describe("setup", () => {
     await flush();
     expect(element("stack-phase").textContent).toBe(PL_MESSAGES["Downloading Rakazo…"]);
     expect(element("stack-detail").textContent).toBe("Pobrano 3 MB");
+  });
+
+  it("auto-selects This computer and starts the stack when autoStartLocal is set", async () => {
+    const ui = mount({ mode: "existing", serverUrl: CLOUD_URL }, ENGLISH, "win32", {
+      autoStartLocal: true,
+    });
+    await flush();
+    ui.resolveStackState(stackState("idle"));
+    await flush();
+    expect(document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value).toBe(
+      "new",
+    );
+    expect(ui.starts()).toBe(1);
+    ui.startResult.resolve(stackState("pulling"));
+    await flush();
+    expect(element("stack-phase").textContent).toBe("Downloading Rakazo…");
+  });
+
+  it("refreshes the local URL before auto-saving an already-ready stack", async () => {
+    const ui = mount({ mode: "existing", serverUrl: CLOUD_URL }, ENGLISH, "win32", {
+      autoStartLocal: true,
+    });
+    await flush();
+    ui.resolveStackState(stackState("ready"));
+    await flush();
+    ui.resolveAppState({ mode: "existing", serverUrl: CLOUD_URL }, "http://127.0.0.1:49999");
+    await flush();
+    expect(ui.saves).toEqual([{ mode: "new", serverUrl: "http://127.0.0.1:49999" }]);
   });
 });

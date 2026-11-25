@@ -32,6 +32,7 @@ function createSetupWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.once("closed", () => {
     if (desktop.setupWindow === win) desktop.setupWindow = null;
+    desktop.autoStartLocalSetup = false;
     // Closing setup without saving restores a connected session (Change Server cancel).
     restoreAppWindowAfterSetup();
   });
@@ -132,12 +133,17 @@ export function registerSetupIpc({
     dir: desktopDirection(),
     messages: desktopMessages(),
   }));
-  handleIpc("desktop.setup.state", () => ({
-    defaultLocalUrl: desktop.localStack.webUrl(),
-    cloudUrl: RAKAZO_CLOUD_URL,
-    saved: desktop.currentSetup,
-    error: desktop.setupError ?? undefined,
-  }));
+  handleIpc("desktop.setup.state", () => {
+    const autoStartLocal = desktop.autoStartLocalSetup;
+    desktop.autoStartLocalSetup = false;
+    return {
+      defaultLocalUrl: desktop.localStack.webUrl(),
+      cloudUrl: RAKAZO_CLOUD_URL,
+      saved: desktop.currentSetup,
+      error: desktop.setupError ?? undefined,
+      ...(autoStartLocal ? { autoStartLocal: true } : {}),
+    };
+  });
 
   handleIpc("desktop.setup.test", async (_event, url, headers) => {
     if (typeof url !== "string") return { ok: false, error: t("Enter a server address.") };

@@ -58,6 +58,9 @@ vi.mock("../../lib/query/rpc", () => ({
 }));
 vi.mock("./BillingSettingsPanel", () => ({ BillingSettingsPanel: () => null }));
 vi.mock("./PaymentWalletSettingsPanel", () => ({ PaymentWalletSettingsPanel: () => null }));
+vi.mock("./ServerSettingsPanel", () => ({
+  ServerSettingsPanel: () => <div data-testid="server-settings-panel" />,
+}));
 vi.mock("./MemorySettingsOverlay", () => ({
   MemorySettingsOverlay: ({
     config,
@@ -460,5 +463,43 @@ it("keeps the organization options in the page header, on the main Organization 
     expect(options()).toBeNull();
   } finally {
     await cleanup();
+  }
+});
+
+it("shows Server settings only when the desktop server bridge is present", async () => {
+  const withoutDesktop = await render({ section: "server" });
+  try {
+    expect(
+      withoutDesktop.container.querySelector('[data-testid="settings-nav-server"]'),
+    ).toBeNull();
+    expect(
+      withoutDesktop.container
+        .querySelector('[data-testid="user-settings"]')
+        ?.getAttribute("data-settings-section"),
+    ).toBe("general");
+  } finally {
+    await withoutDesktop.cleanup();
+  }
+
+  window.rakazoDesktop = {
+    platform: "win32",
+    server: { change: vi.fn(async () => undefined) },
+  } as never;
+  const withDesktop = await render({ section: "server" });
+  try {
+    expect(
+      withDesktop.container.querySelector('[data-testid="settings-nav-server"]'),
+    ).not.toBeNull();
+    expect(
+      withDesktop.container
+        .querySelector('[data-testid="user-settings"]')
+        ?.getAttribute("data-settings-section"),
+    ).toBe("server");
+    expect(
+      withDesktop.container.querySelector('[data-testid="server-settings-panel"]'),
+    ).not.toBeNull();
+  } finally {
+    delete window.rakazoDesktop;
+    await withDesktop.cleanup();
   }
 });
